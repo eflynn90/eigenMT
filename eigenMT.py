@@ -174,8 +174,11 @@ def make_test_dict_tensorqtl(QTL_fh, gen_dict, genpos_dict, cis_dist, group_size
             g0 = g.loc[g['p-value'].idxmin()]
         elif gene_id in phegen_dict:
             g0 = g.loc[g['variant_id'] == phegen_dict[gene_id]]
+            if len(g0) == 0:
+                print("WARNING: SNP ID %s not found in QTL file. Phenotype %s will be skipped." %(phegen_dict[gene_id],gene_id))
         else:
             print("WARNING: Phenotype %s not found in phenotype-genotype list. Will not be found in output file." %gene_id)
+            continue
         test_dict[gene_id] = {
             'snps': [genpos_dict[i] for i in g['variant_id']],  # variant positions
             'best_snp':genpos_dict[g0['variant_id']],
@@ -348,7 +351,7 @@ if __name__=='__main__':
     parser.add_argument('--external', action = 'store_true', help = 'indicates whether the provided genotype matrix is different from the one used to call cis-eQTLs initially (default = False)')
     parser.add_argument('--sample_list', default=None, help='File with sample IDs (one per line) to select from genotypes')
     parser.add_argument('--phenotype_groups', default=None, help='File with phenotype_id->group_id mapping')
-    parser.add_argument('--phenotype_genotype', default=None, help='File with phenotype_id, genotype_id for cases where user is interested in corrections for specific snps')
+    parser.add_argument('--snp_list', default=None, help='File with phenotype_id, genotype_id for cases where user is interested in corrections for specific snps')
     args = parser.parse_args()
 
     ##Make SNP position dict
@@ -370,10 +373,10 @@ if __name__=='__main__':
     gen_dict = make_gen_dict(args.GEN, genpos_dict, sample_ids)
 
     ##Make snp list dict
-    if args.phenotype_genotype is not None:
+    if args.snp_list is not None:
         print('Processing genotype-phenotype list')
-        phegen_dict = make_phegen_dict(args.snp_list, args.CHROM)
-    else
+        phegen_dict = make_phegen_dict(args.snp_list)
+    else:
         phegen_dict = None
 
     ##Make SNP-gene test dict
