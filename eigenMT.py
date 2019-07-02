@@ -95,6 +95,24 @@ def make_gen_dict(GEN_fh, pos_dict, sample_ids=None):
             gen_dict[snp] = genos
     return gen_dict  # pos->genotypes
 
+
+def make_phegen_dict(phegen_fh):
+    '''
+    Function to read in genes and their associated snps and make a dict.
+    Keys are phenotype IDs; values are snps.
+    '''
+    phegen_dict = {}
+    with open_file(phegen_fh) as phegen:
+        phegen.readline()  # skip header
+        for line in phegen:
+            line = line.rstrip().split()
+            phenotype = line[0]
+            if phenotype not in phegen_dict:
+                phegen_dict[phenotype] = line[1]
+            else:
+                print("WARNING: Phenotype %s found more than once in phenotype-genotype list. Only first instance used." %(phenotype))
+    return phegen_dict
+
 def make_test_dict(QTL_fh, gen_dict, genpos_dict, phepos_dict, cis_dist):
     '''
     Function to make dict of SNP-gene tests. Also returns the header of the file.
@@ -140,7 +158,7 @@ def make_test_dict(QTL_fh, gen_dict, genpos_dict, phepos_dict, cis_dist):
     QTL.close()
     return test_dict, "\t".join(header)
 
-def make_test_dict_tensorqtl(QTL_fh, gen_dict, genpos_dict, cis_dist, group_size_s=None):
+def make_test_dict_tensorqtl(QTL_fh, gen_dict, genpos_dict, cis_dist, group_size_s=None, phegen_dict=None):
     """
     Same arguments and output as make_test_dict, for output from tensorQTL.
     QTL_fh: parquet file with variant-gene pair associations
@@ -152,6 +170,12 @@ def make_test_dict_tensorqtl(QTL_fh, gen_dict, genpos_dict, cis_dist, group_size
     test_dict = {}
     for gene_id,g in gdf:
         g0 = g.loc[g['p-value'].idxmin()]
+        if phegen_dict is None:
+            g0 = g.loc[g['p-value'].idxmin()]
+        elif gene_id in phegen_dict:
+            g0 = g.loc[g['variant_id'] == phegen_dict[gene_id]]
+        else:
+            print("WARNING: Phenotype %s not found in phenotype-genotype list. Will not be found in output file." %gene_id)
         test_dict[gene_id] = {
             'snps': [genpos_dict[i] for i in g['variant_id']],  # variant positions
             'best_snp':genpos_dict[g0['variant_id']],
@@ -324,6 +348,7 @@ if __name__=='__main__':
     parser.add_argument('--external', action = 'store_true', help = 'indicates whether the provided genotype matrix is different from the one used to call cis-eQTLs initially (default = False)')
     parser.add_argument('--sample_list', default=None, help='File with sample IDs (one per line) to select from genotypes')
     parser.add_argument('--phenotype_groups', default=None, help='File with phenotype_id->group_id mapping')
+    parser.add_argument('--phenotype_genotype', default=None, help='File with phenotype_id, genotype_id for cases where user is interested in corrections for specific snps')
     args = parser.parse_args()
 
     ##Make SNP position dict
@@ -344,6 +369,13 @@ if __name__=='__main__':
         sample_ids = None
     gen_dict = make_gen_dict(args.GEN, genpos_dict, sample_ids)
 
+    ##Make snp list dict
+    if args.phenotype_genotype is not None:
+        print('Processing genotype-phenotype list')
+        phegen_dict = make_phegen_dict(args.snp_list, args.CHROM)
+    else
+        phegen_dict = None
+
     ##Make SNP-gene test dict
     if not args.external:
         if args.QTL.endswith('.parquet'):
@@ -353,7 +385,7 @@ if __name__=='__main__':
                 group_size_s = group_s.value_counts()
             else:
                 group_size_s = None
-            test_dict, input_header = make_test_dict_tensorqtl(args.QTL, gen_dict, genpos_dict, args.cis_dist, group_size_s=group_size_s)
+            test_dict, input_header = make_test_dict_tensorqtl(args.QTL, gen_dict, genpos_dict, args.cis_dist, group_size_s=group_size_s, phegen_dict=phegen_dict)
         else:
             print('Processing Matrix-eQTL tests file.', flush=True)
             test_dict, input_header = make_test_dict(args.QTL, gen_dict, genpos_dict, phepos_dict, args.cis_dist)
