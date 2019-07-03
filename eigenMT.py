@@ -399,3 +399,5 @@ if __name__=='__main__':
     ##Perform BF correction using eigenvalue decomposition of the correlation matrix
     print('Performing eigenMT correction.', flush=True)
     bf_eigen_windows(test_dict, gen_dict, phepos_dict, args.OUT, input_header, args.var_thresh, args.window)
+
+    print('Done.')
